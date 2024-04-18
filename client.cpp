@@ -1,7 +1,24 @@
 #include <iostream>
 #include <winsock2.h>
-
+#include <string>
+#include <thread>
+using namespace std;
 #pragma comment(lib, "ws2_32.lib")
+
+void receive_messages(SOCKET sock) {
+    char buffer[1024];
+    int bytesReceived;
+    while (true) {
+        memset(buffer, 0, sizeof(buffer));
+        bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
+        if (bytesReceived > 0) {
+            cout <<"message receieved:"<< buffer <<endl;
+        } else {
+            cout << "Server disconnected." << endl;
+            break;
+        }
+    }
+}
 
 int main() {
     WSADATA wsaData;
@@ -9,53 +26,50 @@ int main() {
     struct sockaddr_in serverAddr;
     char buffer[1024];
 
-    // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "WSAStartup failed.\n";
+        cerr << "WSAStartup failed.\n";
         return 1;
     }
 
-    // Create socket
     if ((clientSocket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-        std::cerr << "Failed to create socket.\n";
+        cerr << "Failed to create socket.\n";
         WSACleanup();
         return 1;
     }
 
-    // Connect to server
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Change to server's IP address
-    serverAddr.sin_port = htons(8888); // Change to server's port
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    serverAddr.sin_port = htons(8888);
 
     if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        std::cerr << "Connection failed.\n";
+        cerr << "Connection failed.\n";
         closesocket(clientSocket);
         WSACleanup();
         return 1;
     }
+    cout <<"Welcome to the chat!\n";
+    cout << "Connected to chat server.\n";
 
-    std::cout << "Connected to chat server.\n";
+    // Create a thread to receive messages from the server
+    thread recvThread(receive_messages, clientSocket);
+    recvThread.detach();
 
-    // Chat loop
+    string input;
     while (true) {
-        std::cout << "Enter message: ";
-        std::cin.getline(buffer, sizeof(buffer));
+        cout << "Enter message for server: ";
+        getline(cin, input);
 
-        // Send message to server
-        send(clientSocket, buffer, strlen(buffer), 0);
-
-        // Receive response from server
-        memset(buffer, 0, sizeof(buffer));
-        int bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesReceived == SOCKET_ERROR || bytesReceived == 0) {
-            std::cerr << "Server disconnected.\n";
-            break;
+        if (input.empty()) {
+            continue; // Skip empty messages
         }
 
-        std::cout << "Server says: " << buffer << std::endl;
+        // Send message to server
+        if (send(clientSocket, input.c_str(), input.size(), 0) == SOCKET_ERROR) {
+            cerr << "Send failed.\n";
+            break;
+        }
     }
 
-    // Cleanup
     closesocket(clientSocket);
     WSACleanup();
 
