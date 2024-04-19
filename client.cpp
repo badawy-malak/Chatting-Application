@@ -12,7 +12,7 @@ void receive_messages(SOCKET sock) {
         memset(buffer, 0, sizeof(buffer));
         bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
         if (bytesReceived > 0) {
-            cout <<"message receieved:"<< buffer <<endl;
+            cout <<"\nmessage receieved:"<< buffer <<endl;
         } else {
             cout << "Server disconnected." << endl;
             break;
