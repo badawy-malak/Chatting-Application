@@ -4,13 +4,13 @@
 #include <vector>
 #include <algorithm>
 #include <string>
-#include <fstream> // Include fstream for file operations
 #include <mutex>
+#include <fstream>
 using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
-vector<SOCKET> connectedClients;
+vector<pair<SOCKET, string>> connectedClients;
 mutex clientMutex;
 
 void handleClient(SOCKET clientSocket) {
@@ -20,11 +20,27 @@ void handleClient(SOCKET clientSocket) {
     // Receive username from client
     bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
     if (bytesReceived > 0) {
-        // Save the received username to a text file
-        ofstream usernameFile("usernames.txt", ios::app);
-        if (usernameFile.is_open()) {
-            usernameFile << buffer << endl;
-            usernameFile.close();
+        string username(buffer);
+        cout << "New client connected: " << username << endl;
+
+        // Receive password from client
+        bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (bytesReceived > 0) {
+            string password(buffer);
+            cout << "Password received." << endl;
+
+            // Store username-password pair in file "users.txt"
+            ofstream userFile("users.txt", ios::app); // Open file in append mode
+            if (userFile.is_open()) {
+                userFile << username << " " << password << endl;
+                userFile.close();
+            } else {
+                cerr << "Failed to open users.txt for writing." << endl;
+            }
+
+            clientMutex.lock();
+            connectedClients.push_back(make_pair(clientSocket, username)); // Store socket and username
+            clientMutex.unlock();
         }
     }
 
@@ -36,29 +52,22 @@ void handleClient(SOCKET clientSocket) {
             break;
         }
 
-        cout << buffer << endl;
-
-// Relay message to all other clients
-clientMutex.lock();
-for (SOCKET& otherClientSocket : connectedClients) {
-    if (otherClientSocket != clientSocket) {
-        // Prepare the message with a newline character (\n) prefix
-        string relayMessage = "\n" + string(buffer);
-
-        // Send the modified message to the other client
-        if (send(otherClientSocket, relayMessage.c_str(), relayMessage.size(), 0) == SOCKET_ERROR) {
-            cerr << "Send failed.\n";
-            // Handle send error
+        // Relay message to all other clients
+        clientMutex.lock();
+        for (auto& client : connectedClients) {
+            if (client.first != clientSocket) {
+                send(client.first, buffer, bytesReceived, 0);
+            }
         }
-    }
-}
-clientMutex.unlock();
-
+        clientMutex.unlock();
     }
 
     // Remove client socket from vector after handling
     clientMutex.lock();
-    auto it = find(connectedClients.begin(), connectedClients.end(), clientSocket);
+    auto it = find_if(connectedClients.begin(), connectedClients.end(),
+                      [clientSocket](const pair<SOCKET, string>& client) {
+                          return client.first == clientSocket;
+                      });
     if (it != connectedClients.end()) {
         connectedClients.erase(it);
     }
@@ -118,10 +127,6 @@ int main() {
         }
 
         cout << "New client connected.\n";
-
-        clientMutex.lock();
-        connectedClients.push_back(clientSocket);
-        clientMutex.unlock();
 
         thread clientThread(handleClient, clientSocket);
         clientThread.detach();

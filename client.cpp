@@ -51,12 +51,18 @@ int main() {
 
     cout << "Welcome to the chat!\n";
 
-    string username;
+    string username, password;
     cout << "Enter your name: ";
     getline(cin, username);
 
     // Send username to server
     send(clientSocket, username.c_str(), username.size(), 0);
+
+    cout << "Enter your password (please make sure that the password is the same length of your name or more but not less): ";
+    getline(cin, password);
+
+    // Send password to server
+    send(clientSocket, password.c_str(), password.size(), 0);
 
     cout << "Connected to chat server.\n";
 
