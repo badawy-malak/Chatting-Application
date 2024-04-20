@@ -51,18 +51,37 @@ int main() {
 
     cout << "Welcome to the chat!\n";
 
-    string username, password;
-    cout << "Enter your name: ";
-    getline(cin, username);
+    // Prompt for account creation or login
+    string name;
+    int choice;
+    cout << "Enter '1' to create an account or '2' to login: ";
+    cin >> choice;
+    cin.ignore(); // Ignore newline character in buffer
 
-    // Send username to server
-    send(clientSocket, username.c_str(), username.size(), 0);
+    if (choice == 1) {
+        // Account creation
+        cout << "Enter your name: ";
+        getline(cin, name);
+        cout << "Enter your password: ";
+        string password;
+        getline(cin, password);
 
-    cout << "Enter your password (please make sure that the password is the same length of your name or more but not less): ";
-    getline(cin, password);
+        // Send the account creation request to the server
+        string accountRequest = name + " " + password;
+        send(clientSocket, accountRequest.c_str(), accountRequest.size(), 0);
 
-    // Send password to server
-    send(clientSocket, password.c_str(), password.size(), 0);
+    } else if (choice == 2) {
+        // Display message and exit
+        cout << "Logging in is still a work in progress. Exiting...\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 0;
+    } else {
+        cerr << "Invalid choice. Exiting...\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
 
     cout << "Connected to chat server.\n";
 
@@ -72,15 +91,15 @@ int main() {
 
     string input;
     while (true) {
-        cout << "You (" << username << "): ";
+        cout << "You (" << name << "): ";
         getline(cin, input);
 
         if (input.empty()) {
             continue; // Skip empty messages
         }
 
-        // Send message to server with username prefixed
-        string fullMessage = username + ": " + input;
+        // Format the message with client's name and send to server
+        string fullMessage = name + ": " + input;
         if (send(clientSocket, fullMessage.c_str(), fullMessage.size(), 0) == SOCKET_ERROR) {
             cerr << "Send failed.\n";
             break;

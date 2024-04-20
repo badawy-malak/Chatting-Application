@@ -4,44 +4,32 @@
 #include <vector>
 #include <algorithm>
 #include <string>
-#include <mutex>
 #include <fstream>
+#include <mutex>
 using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
-vector<pair<SOCKET, string>> connectedClients;
+vector<SOCKET> connectedClients;
 mutex clientMutex;
 
 void handleClient(SOCKET clientSocket) {
     char buffer[1024];
     int bytesReceived;
 
-    // Receive username from client
+    // Receive username and password from client
+    memset(buffer, 0, sizeof(buffer));
     bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
     if (bytesReceived > 0) {
         string username(buffer);
         cout << "New client connected: " << username << endl;
 
-        // Receive password from client
-        bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesReceived > 0) {
-            string password(buffer);
-            cout << "Password received." << endl;
-
-            // Store username-password pair in file "users.txt"
-            ofstream userFile("users.txt", ios::app); // Open file in append mode
-            if (userFile.is_open()) {
-                userFile << username << " " << password << endl;
-                userFile.close();
-            } else {
-                cerr << "Failed to open users.txt for writing." << endl;
-            }
-
-            clientMutex.lock();
-            connectedClients.push_back(make_pair(clientSocket, username)); // Store socket and username
-            clientMutex.unlock();
+        // Store username and password in a text file (users.txt)
+        ofstream outfile("users.txt", ios::app);
+        if (outfile.is_open()) {
+            outfile << username << endl;
         }
+        outfile.close();
     }
 
     while (true) {
@@ -52,11 +40,16 @@ void handleClient(SOCKET clientSocket) {
             break;
         }
 
+        cout << buffer << endl;
+
         // Relay message to all other clients
         clientMutex.lock();
-        for (auto& client : connectedClients) {
-            if (client.first != clientSocket) {
-                send(client.first, buffer, bytesReceived, 0);
+        for (SOCKET& otherClientSocket : connectedClients) {
+            if (otherClientSocket != clientSocket) {
+                if (send(otherClientSocket, buffer, bytesReceived, 0) == SOCKET_ERROR) {
+                    cerr << "Send failed.\n";
+                    // Handle send error
+                }
             }
         }
         clientMutex.unlock();
@@ -64,10 +57,7 @@ void handleClient(SOCKET clientSocket) {
 
     // Remove client socket from vector after handling
     clientMutex.lock();
-    auto it = find_if(connectedClients.begin(), connectedClients.end(),
-                      [clientSocket](const pair<SOCKET, string>& client) {
-                          return client.first == clientSocket;
-                      });
+    auto it = find(connectedClients.begin(), connectedClients.end(), clientSocket);
     if (it != connectedClients.end()) {
         connectedClients.erase(it);
     }
@@ -127,6 +117,10 @@ int main() {
         }
 
         cout << "New client connected.\n";
+
+        clientMutex.lock();
+        connectedClients.push_back(clientSocket);
+        clientMutex.unlock();
 
         thread clientThread(handleClient, clientSocket);
         clientThread.detach();
