@@ -2,21 +2,31 @@
 #include <winsock2.h>
 #include <thread>
 #include <vector>
-#include <algorithm> // Include algorithm header for find
+#include <algorithm>
 #include <string>
+#include <fstream> // Include fstream for file operations
 #include <mutex>
 using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
-// Global vector to hold connected client sockets
 vector<SOCKET> connectedClients;
-mutex clientMutex; // Mutex to protect access to connectedClients
+mutex clientMutex;
 
-// Function to handle communication with a single client
 void handleClient(SOCKET clientSocket) {
     char buffer[1024];
     int bytesReceived;
+
+    // Receive username from client
+    bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
+    if (bytesReceived > 0) {
+        // Save the received username to a text file
+        ofstream usernameFile("usernames.txt", ios::app);
+        if (usernameFile.is_open()) {
+            usernameFile << buffer << endl;
+            usernameFile.close();
+        }
+    }
 
     while (true) {
         memset(buffer, 0, sizeof(buffer));
@@ -26,19 +36,27 @@ void handleClient(SOCKET clientSocket) {
             break;
         }
 
-        cout << "Received from client: " << buffer << endl;
+        cout << buffer << endl;
 
-        // Relay message to all other clients
-        clientMutex.lock();
-        for (SOCKET& otherClientSocket : connectedClients) {
-            if (otherClientSocket != clientSocket) {
-                send(otherClientSocket, buffer, bytesReceived, 0);
-            }
+// Relay message to all other clients
+clientMutex.lock();
+for (SOCKET& otherClientSocket : connectedClients) {
+    if (otherClientSocket != clientSocket) {
+        // Prepare the message with a newline character (\n) prefix
+        string relayMessage = "\n" + string(buffer);
+
+        // Send the modified message to the other client
+        if (send(otherClientSocket, relayMessage.c_str(), relayMessage.size(), 0) == SOCKET_ERROR) {
+            cerr << "Send failed.\n";
+            // Handle send error
         }
-        clientMutex.unlock();
+    }
+}
+clientMutex.unlock();
+
     }
 
-    // Remove the client socket from the vector after handling
+    // Remove client socket from vector after handling
     clientMutex.lock();
     auto it = find(connectedClients.begin(), connectedClients.end(), clientSocket);
     if (it != connectedClients.end()) {
@@ -46,7 +64,6 @@ void handleClient(SOCKET clientSocket) {
     }
     clientMutex.unlock();
 
-    // Cleanup and close socket
     closesocket(clientSocket);
 }
 
@@ -91,9 +108,7 @@ int main() {
 
     cout << "Chat server is running...\n";
 
-    // Accept incoming connections and handle each client in a separate thread
     while (true) {
-        // Accept a new connection
         SOCKET clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
         if (clientSocket == INVALID_SOCKET) {
             cerr << "Accept failed.\n";
@@ -104,17 +119,14 @@ int main() {
 
         cout << "New client connected.\n";
 
-        // Add client socket to vector of connected clients
         clientMutex.lock();
         connectedClients.push_back(clientSocket);
         clientMutex.unlock();
 
-        // Create thread to handle communication with the client
         thread clientThread(handleClient, clientSocket);
-        clientThread.detach(); // Detach thread to allow it to run independently
+        clientThread.detach();
     }
 
-    // Cleanup
     closesocket(serverSocket);
     WSACleanup();
 

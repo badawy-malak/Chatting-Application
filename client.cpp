@@ -3,6 +3,7 @@
 #include <string>
 #include <thread>
 using namespace std;
+
 #pragma comment(lib, "ws2_32.lib")
 
 void receive_messages(SOCKET sock) {
@@ -12,9 +13,9 @@ void receive_messages(SOCKET sock) {
         memset(buffer, 0, sizeof(buffer));
         bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
         if (bytesReceived > 0) {
-            cout <<"\nmessage receieved:"<< buffer <<endl;
+            cout << buffer << endl;
         } else {
-            cout << "Server disconnected." << endl;
+            cerr << "Server disconnected." << endl;
             break;
         }
     }
@@ -47,7 +48,16 @@ int main() {
         WSACleanup();
         return 1;
     }
-    cout <<"Welcome to the chat!\n";
+
+    cout << "Welcome to the chat!\n";
+
+    string username;
+    cout << "Enter your name: ";
+    getline(cin, username);
+
+    // Send username to server
+    send(clientSocket, username.c_str(), username.size(), 0);
+
     cout << "Connected to chat server.\n";
 
     // Create a thread to receive messages from the server
@@ -56,15 +66,16 @@ int main() {
 
     string input;
     while (true) {
-        cout << "Enter message for server: ";
+        cout << "You (" << username << "): ";
         getline(cin, input);
 
         if (input.empty()) {
             continue; // Skip empty messages
         }
 
-        // Send message to server
-        if (send(clientSocket, input.c_str(), input.size(), 0) == SOCKET_ERROR) {
+        // Send message to server with username prefixed
+        string fullMessage = username + ": " + input;
+        if (send(clientSocket, fullMessage.c_str(), fullMessage.size(), 0) == SOCKET_ERROR) {
             cerr << "Send failed.\n";
             break;
         }
