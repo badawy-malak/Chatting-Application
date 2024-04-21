@@ -50,8 +50,6 @@ int main() {
     }
 
     cout << "Welcome to the chat!\n";
-
-    // Prompt for account creation or login
     string name;
     int choice;
     cout << "Enter '1' to create an account or '2' to login: ";
@@ -59,23 +57,51 @@ int main() {
     cin.ignore(); // Ignore newline character in buffer
 
     if (choice == 1) {
-        // Account creation
-        cout << "Enter your name: ";
+    // Account creation
+    cout << "Enter your name: ";
+    getline(cin, name);
+    cout << "Enter your password: ";
+    string password;
+    getline(cin, password);
+
+    // Send the account creation request to the server
+    string accountRequest = "CREATE " + name + " " + password;  // Updated to include a command for clarity
+    send(clientSocket, accountRequest.c_str(), accountRequest.size(), 0);
+
+    // Wait for account creation success message
+    memset(buffer, 0, sizeof(buffer));
+    recv(clientSocket, buffer, sizeof(buffer), 0);
+    if (strcmp(buffer, "Account Created Successfully") == 0) {
+        cout << "Account created successfully.\n";
+    } else {
+        cout << "Account creation failed.\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 0;
+    }
+    } else if (choice == 2) {
+        // Login
+        cout << "Enter your username: ";
         getline(cin, name);
         cout << "Enter your password: ";
         string password;
         getline(cin, password);
 
-        // Send the account creation request to the server
-        string accountRequest = name + " " + password;
-        send(clientSocket, accountRequest.c_str(), accountRequest.size(), 0);
+        // Send the login request to the server
+        string loginRequest = "LOGIN " + name + " " + password;
+        send(clientSocket, loginRequest.c_str(), loginRequest.size(), 0);
 
-    } else if (choice == 2) {
-        // Display message and exit
-        cout << "Logging in is still a work in progress. Exiting...\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 0;
+        // Wait for login success message
+        memset(buffer, 0, sizeof(buffer));
+        recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (strcmp(buffer, "Login Successful") == 0) {
+            cout << "Logged in successfully.\n";
+        } else {
+            cout << "Login failed. Please check your username and password.\n";
+            closesocket(clientSocket);
+            WSACleanup();
+            return 0;
+        }
     } else {
         cerr << "Invalid choice. Exiting...\n";
         closesocket(clientSocket);
