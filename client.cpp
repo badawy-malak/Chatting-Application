@@ -6,6 +6,23 @@ using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
+// Function to encrypt a string using Caesar cipher
+string encrypt(const string& plain_text, int key) {
+    string cipher_text = "";
+    string alphabet = "abcdefghijklmnopqrstuvwxyz";
+    for (char i : plain_text) {
+        char c = tolower(i);
+        if (isalpha(c)) {
+            int index = alphabet.find(c);
+            char encrypted_char = alphabet[(index + key) % 26];
+            cipher_text += (isupper(i)) ? toupper(encrypted_char) : encrypted_char;
+        } else {
+            cipher_text += i; // Preserve non-alphabet characters
+        }
+    }
+    return cipher_text;
+}
+
 void receive_messages(SOCKET sock) {
     char buffer[1024];
     int bytesReceived;
@@ -57,28 +74,31 @@ int main() {
     cin.ignore(); // Ignore newline character in buffer
 
     if (choice == 1) {
-    // Account creation
-    cout << "Enter your name: ";
-    getline(cin, name);
-    cout << "Enter your password: ";
-    string password;
-    getline(cin, password);
+        // Account creation
+        cout << "Enter your name: ";
+        getline(cin, name);
+        cout << "Enter your password: ";
+        string password;
+        getline(cin, password);
 
-    // Send the account creation request to the server
-    string accountRequest = "CREATE " + name + " " + password;  // Updated to include a command for clarity
-    send(clientSocket, accountRequest.c_str(), accountRequest.size(), 0);
+        // Encrypt the password before sending to server
+        string encryptedPassword = encrypt(password, 3); // Example key: 3
 
-    // Wait for account creation success message
-    memset(buffer, 0, sizeof(buffer));
-    recv(clientSocket, buffer, sizeof(buffer), 0);
-    if (strcmp(buffer, "Account Created Successfully") == 0) {
-        cout << "Account created successfully.\n";
-    } else {
-        cout << "Account creation failed.\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 0;
-    }
+        // Send the account creation request to the server
+        string accountRequest = "CREATE " + name + " " + encryptedPassword;
+        send(clientSocket, accountRequest.c_str(), accountRequest.size(), 0);
+
+        // Wait for account creation success message
+        memset(buffer, 0, sizeof(buffer));
+        recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (strcmp(buffer, "Account Created Successfully") == 0) {
+            cout << "Account created successfully.\n";
+        } else {
+            cout << "Account creation failed.\n";
+            closesocket(clientSocket);
+            WSACleanup();
+            return 0;
+        }
     } else if (choice == 2) {
         // Login
         cout << "Enter your username: ";
@@ -87,8 +107,11 @@ int main() {
         string password;
         getline(cin, password);
 
+        // Encrypt the password before sending to server
+        string encryptedPassword = encrypt(password, 3); // Example key: 3
+
         // Send the login request to the server
-        string loginRequest = "LOGIN " + name + " " + password;
+        string loginRequest = "LOGIN " + name + " " + encryptedPassword;
         send(clientSocket, loginRequest.c_str(), loginRequest.size(), 0);
 
         // Wait for login success message
