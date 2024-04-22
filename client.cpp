@@ -23,6 +23,24 @@ string encrypt(const string& plain_text, int key) {
     return cipher_text;
 }
 
+// Function to decrypt a string using Caesar cipher
+string decrypt(const string& cipher_text, int key) {
+    string plain_text = "";
+    string alphabet = "abcdefghijklmnopqrstuvwxyz";
+    for (char i : cipher_text) {
+        char c = tolower(i);
+        if (isalpha(c)) {
+            int index = alphabet.find(c);
+            char decrypted_char = alphabet[(index - key + 26) % 26];
+            plain_text += (isupper(i)) ? toupper(decrypted_char) : decrypted_char;
+        } else {
+            plain_text += i; // Preserve non-alphabet characters
+        }
+    }
+    return plain_text;
+}
+
+
 void receive_messages(SOCKET sock) {
     char buffer[1024];
     int bytesReceived;
@@ -30,7 +48,8 @@ void receive_messages(SOCKET sock) {
         memset(buffer, 0, sizeof(buffer));
         bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
         if (bytesReceived > 0) {
-            cout << buffer << endl;
+            string decryptedMessage = decrypt(buffer,3);
+            cout << "\n"<<decryptedMessage << endl;
         } else {
             cerr << "Server disconnected." << endl;
             break;
@@ -149,7 +168,8 @@ int main() {
 
         // Format the message with client's name and send to server
         string fullMessage = name + ": " + input;
-        if (send(clientSocket, fullMessage.c_str(), fullMessage.size(), 0) == SOCKET_ERROR) {
+        string encryptedMessage = encrypt(fullMessage,3);
+        if (send(clientSocket, encryptedMessage.c_str(), encryptedMessage.size(), 0) == SOCKET_ERROR) {
             cerr << "Send failed.\n";
             break;
         }

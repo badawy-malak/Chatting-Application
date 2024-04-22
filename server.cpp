@@ -121,6 +121,8 @@ void handleClient(SOCKET clientSocket) {
         clientMutex.lock();
         for (SOCKET& otherClientSocket : connectedClients) {
             if (otherClientSocket != clientSocket) {
+                // string example=decrypt(buffer,3);
+                cout <<buffer << "\n";
                 send(otherClientSocket, buffer, bytesReceived, 0);
             }
         }
