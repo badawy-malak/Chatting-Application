@@ -1,17 +1,22 @@
 #include <iostream>
 #include <winsock2.h>
 #include <thread>
-#include <vector>
-#include <algorithm>
 #include <string>
 #include <fstream>
-#include <mutex>
 #include <sstream>
+#include <mutex>
 using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
-vector<SOCKET> connectedClients;
+struct ClientNode {
+    SOCKET clientSocket;
+    ClientNode* next;
+
+    ClientNode(SOCKET socket) : clientSocket(socket), next(nullptr) {}
+};
+
+ClientNode* connectedClientsHead = nullptr;
 mutex clientMutex;
 
 // Function prototypes
@@ -35,6 +40,35 @@ string decrypt(const string& cipher_text, int key) {
     return plain_text;
 }
 
+void addClient(SOCKET clientSocket) {
+    ClientNode* newNode = new ClientNode(clientSocket);
+    clientMutex.lock();
+    newNode->next = connectedClientsHead;
+    connectedClientsHead = newNode;
+    clientMutex.unlock();
+}
+
+void removeClient(SOCKET clientSocket) {
+    clientMutex.lock();
+    ClientNode* current = connectedClientsHead;
+    ClientNode* prev = nullptr;
+
+    while (current != nullptr) {
+        if (current->clientSocket == clientSocket) {
+            if (prev == nullptr) {
+                connectedClientsHead = current->next;
+            } else {
+                prev->next = current->next;
+            }
+            delete current;
+            break;
+        }
+        prev = current;
+        current = current->next;
+    }
+    clientMutex.unlock();
+}
+
 void handleClient(SOCKET clientSocket) {
     char buffer[1024];
     int bytesReceived;
@@ -43,18 +77,13 @@ void handleClient(SOCKET clientSocket) {
     bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
     if (bytesReceived > 0) {
         string credentials(buffer);
-        vector<string> tokens;
         stringstream ss(credentials);
-        string intermediate;
+        string command;
+        ss >> command;
 
-        // Tokenizing the string by spaces
-        while (getline(ss, intermediate, ' ')) {
-            tokens.push_back(intermediate);
-        }
-
-        if (tokens[0] == "LOGIN") {
-            string username = tokens[1];
-            string encryptedPassword = tokens[2];
+        if (command == "LOGIN") {
+            string username, encryptedPassword;
+            ss >> username >> encryptedPassword;
 
             // Decrypt the received encrypted password
             string decryptedPassword = decrypt(encryptedPassword, 3); // Example key: 3
@@ -84,11 +113,12 @@ void handleClient(SOCKET clientSocket) {
                 send(clientSocket, "Login Failed", 13, 0);
                 cout << "Failed login attempt for " << username << endl;
                 closesocket(clientSocket);
+                removeClient(clientSocket);
                 return;
             }
-        } else if (tokens[0] == "CREATE") {
-            string username = tokens[1];
-            string encryptedPassword = tokens[2];
+        } else if (command == "CREATE") {
+            string username, encryptedPassword;
+            ss >> username >> encryptedPassword;
 
             // Store the username and encrypted password in users.txt
             ofstream outfile("users.txt", ios::app);
@@ -101,10 +131,16 @@ void handleClient(SOCKET clientSocket) {
                 send(clientSocket, "Account creation failed", 24, 0);
                 cerr << "Error: Unable to open users.txt for writing." << endl;
             }
+        } else {
+            cerr << "Unknown command received." << endl;
+            closesocket(clientSocket);
+            removeClient(clientSocket);
+            return;
         }
     } else {
         cerr << "Failed to receive data." << endl;
         closesocket(clientSocket);
+        removeClient(clientSocket);
         return;
     }
 
@@ -119,22 +155,18 @@ void handleClient(SOCKET clientSocket) {
 
         // Broadcast received message to other connected clients
         clientMutex.lock();
-        for (SOCKET& otherClientSocket : connectedClients) {
-            if (otherClientSocket != clientSocket) {
-                // string example=decrypt(buffer,3);
-                cout <<buffer << "\n";
-                send(otherClientSocket, buffer, bytesReceived, 0);
+        for (ClientNode* current = connectedClientsHead; current != nullptr; current = current->next) {
+            if (current->clientSocket != clientSocket) {
+                cout<<"Received: "<< buffer << "\n";
+                send(current->clientSocket, buffer, bytesReceived, 0);
             }
         }
         clientMutex.unlock();
     }
 
     // Remove client from the list of connected clients
-    clientMutex.lock();
-    connectedClients.erase(remove(connectedClients.begin(), connectedClients.end(), clientSocket), connectedClients.end());
-    clientMutex.unlock();
-
     closesocket(clientSocket);
+    removeClient(clientSocket);
 }
 
 int main() {
@@ -162,7 +194,7 @@ int main() {
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(8888);
 
-    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         cerr << "Bind failed.\n";
         closesocket(serverSocket);
         WSACleanup();
@@ -180,7 +212,7 @@ int main() {
     cout << "Chat server is running on port 8888...\n";
 
     while (true) {
-        SOCKET clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
+        SOCKET clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (clientSocket == INVALID_SOCKET) {
             cerr << "Accept failed.\n";
             continue;
@@ -188,9 +220,7 @@ int main() {
 
         cout << "New client connected from " << inet_ntoa(clientAddr.sin_addr) << ".\n";
 
-        clientMutex.lock();
-        connectedClients.push_back(clientSocket);
-        clientMutex.unlock();
+        addClient(clientSocket);
 
         thread(handleClient, clientSocket).detach();  // Handle client in a new thread
     }
