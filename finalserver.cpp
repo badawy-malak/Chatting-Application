@@ -38,8 +38,7 @@ string decrypt(const string& cipher_text, int key) {
         } else {
             plain_text += i; // Preserve non-alphabet characters
         }
-    }
-    return plain_text;
+    } return plain_text;
 }
 
 // Add a new client to the list of connected clients
@@ -187,6 +186,7 @@ void handleClient(SOCKET clientSocket) {
         lock_guard<mutex> lock(clientMutex);
         for (ClientNode* current = connectedClientsHead; current != nullptr; current = current->next) {
             if (current->clientSocket != clientSocket) {
+                cout<<"Encrypted Message Received: "<<buffer <<"\n";
                 send(current->clientSocket, buffer, bytesReceived, 0);
             }
         }

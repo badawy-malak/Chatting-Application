@@ -49,7 +49,7 @@ void receive_messages(SOCKET sock) {
         bytesReceived = recv(sock, buffer, sizeof(buffer), 0);
         if (bytesReceived > 0) {
             string decryptedMessage = decrypt(buffer, 3); // Decrypt received message
-            cout << decryptedMessage << endl;
+            cout <<"\n" <<decryptedMessage << endl;
         } else {
             cerr << "Server disconnected." << endl;
             break;
@@ -98,36 +98,38 @@ int main() {
     cin.ignore(); // Ignore newline character in buffer
 
     if (choice == 1) {
-        // Account creation
+    // Account creation
     bool accountCreated = false;
+    while (!accountCreated) {
         cout << "Enter your name: ";
         getline(cin, name);
+        if (name.empty()) {
+            cout << "Name cannot be empty. Please try again.\n";
+            continue;
+        }
         cout << "Enter your password: ";
         string password;
         getline(cin, password);
 
         // Encrypt the password before sending to server
-        string encryptedPassword = encrypt(password, 3);
+        string encryptedPassword = encrypt(password, 3); // Example key: 3
 
-        // Send account creation request to server
+        // Send the account creation request to the server
+        char buffer[1024];
         string accountRequest = "CREATE " + name + " " + encryptedPassword;
         send(clientSocket, accountRequest.c_str(), accountRequest.size(), 0);
 
-        // Wait for server response
-        char buffer[1024];
+        // Wait for account creation response
         memset(buffer, 0, sizeof(buffer));
-        recv(clientSocket, buffer, sizeof(buffer), 0);
-        cout << buffer << endl; // Display server response
         int response = recv(clientSocket, buffer, sizeof(buffer), 0);
         if (response > 0 && strcmp(buffer, "Account Created Successfully") == 0) {
             cout << "Account created successfully.\n";
             accountCreated = true;
         } else {
             cout << "Account creation failed. Please try again.\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
+            // Optionally, you can include more detailed error feedback here
         }
+    }
     } else if (choice == 2) {
         // Login
         cout << "Enter your username: ";
@@ -189,4 +191,4 @@ int main() {
     WSACleanup();
 
     return 0;
-}
+} 
