@@ -119,24 +119,37 @@ void handleClient(SOCKET clientSocket) {
         } else if (command == "CREATE") {
             string username, encryptedPassword;
             ss >> username >> encryptedPassword;
+            ifstream infile("users.txt");
+            string line;
+            while (getline(infile, line)) {
+                stringstream linestream(line);
+                string storedUsername;
+                linestream >> storedUsername;
 
-            // Store the username and encrypted password in users.txt
-            ofstream outfile("users.txt", ios::app);
-            if (outfile.is_open()) {
-                outfile << username << " " << encryptedPassword << endl;
-                outfile.close();
-                send(clientSocket, "Account Created Successfully", 29, 0);
-                cout << "New account created for " << username << "." << endl;
-            } else {
-                send(clientSocket, "Account creation failed", 24, 0);
-                cerr << "Error: Unable to open users.txt for writing." << endl;
-            }
+                if (storedUsername == username) {
+                    string message = "The user name already exist.";
+                    cout<<message;
+                    send(clientSocket, "The user name already exist.", 29, 0);
+                    break;
+                }else if (storedUsername != username){
+                // Store the username and encrypted password in users.txt
+                ofstream outfile("users.txt", ios::app);
+                if (outfile.is_open()) {
+                    outfile << username << " " << encryptedPassword << endl;
+                    outfile.close();
+                    send(clientSocket, "Account Created Successfully", 29, 0);
+                    cout << "New account created for " << username << "." << endl;
+                } else {
+                    send(clientSocket, "Account creation failed", 24, 0);
+                    cerr << "Error: Unable to open users.txt for writing." << endl;
+                }
         } else {
             cerr << "Unknown command received." << endl;
             closesocket(clientSocket);
             removeClient(clientSocket);
             return;
         }
+            }
     } else {
         cerr << "Failed to receive data." << endl;
         closesocket(clientSocket);
@@ -167,6 +180,7 @@ void handleClient(SOCKET clientSocket) {
     // Remove client from the list of connected clients
     closesocket(clientSocket);
     removeClient(clientSocket);
+}
 }
 
 int main() {

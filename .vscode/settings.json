@@ -1,6 +1,6 @@
 {
   "files.associations": {
-    "string": "cpp"
+    "iosfwd": "cpp"
   },
   "C_Cpp_Runner.msvcBatchPath": ""
 }

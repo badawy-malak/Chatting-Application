@@ -112,7 +112,12 @@ int main() {
         recv(clientSocket, buffer, sizeof(buffer), 0);
         if (strcmp(buffer, "Account Created Successfully") == 0) {
             cout << "Account created successfully.\n";
-        } else {
+        } else if (strcmp(buffer, "The user name already exist.") == 0) {
+            cout << "A user with the same name has an account. Try creating an account with another name or login to the existing acouont.\nProgram Exiting..";
+            closesocket(clientSocket);
+            WSACleanup();
+            return 0;
+        }else {
             cout << "Account creation failed.\n";
             closesocket(clientSocket);
             WSACleanup();
