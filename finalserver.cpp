@@ -1,14 +1,16 @@
 #include <iostream>
 #include <winsock2.h>
-#include <thread>
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <mutex>
+#include <thread>
+#include <cstdlib> // For system("pause")
 using namespace std;
 
 #pragma comment(lib, "ws2_32.lib")
 
+// Structure to represent connected clients
 struct ClientNode {
     SOCKET clientSocket;
     ClientNode* next;
@@ -23,7 +25,7 @@ mutex clientMutex;
 void handleClient(SOCKET clientSocket);
 string decrypt(const string& cipher_text, int key);
 
-// Function to decrypt a string using Caesar cipher
+// Decrypt a string using Caesar cipher
 string decrypt(const string& cipher_text, int key) {
     string plain_text = "";
     string alphabet = "abcdefghijklmnopqrstuvwxyz";
@@ -40,16 +42,17 @@ string decrypt(const string& cipher_text, int key) {
     return plain_text;
 }
 
+// Add a new client to the list of connected clients
 void addClient(SOCKET clientSocket) {
     ClientNode* newNode = new ClientNode(clientSocket);
-    clientMutex.lock();
+    lock_guard<mutex> lock(clientMutex);
     newNode->next = connectedClientsHead;
     connectedClientsHead = newNode;
-    clientMutex.unlock();
 }
 
+// Remove a client from the list of connected clients
 void removeClient(SOCKET clientSocket) {
-    clientMutex.lock();
+    lock_guard<mutex> lock(clientMutex);
     ClientNode* current = connectedClientsHead;
     ClientNode* prev = nullptr;
 
@@ -66,13 +69,14 @@ void removeClient(SOCKET clientSocket) {
         prev = current;
         current = current->next;
     }
-    clientMutex.unlock();
 }
 
+// Handle communication with a client
 void handleClient(SOCKET clientSocket) {
     char buffer[1024];
     int bytesReceived;
 
+    // Receive initial data from client
     memset(buffer, 0, sizeof(buffer));
     bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
     if (bytesReceived > 0) {
@@ -86,8 +90,9 @@ void handleClient(SOCKET clientSocket) {
             ss >> username >> encryptedPassword;
 
             // Decrypt the received encrypted password
-            string decryptedPassword = decrypt(encryptedPassword, 3); // Example key: 3
+            string decryptedPassword = decrypt(encryptedPassword, 3);
 
+            // Check login credentials against stored data
             ifstream infile("users.txt");
             string line;
             bool loginSuccess = false;
@@ -97,7 +102,7 @@ void handleClient(SOCKET clientSocket) {
                 linestream >> storedUsername >> storedEncryptedPassword;
 
                 // Decrypt the stored encrypted password for comparison
-                string decryptedStoredPassword = decrypt(storedEncryptedPassword, 3); // Example key: 3
+                string decryptedStoredPassword = decrypt(storedEncryptedPassword, 3);
 
                 if (storedUsername == username && decryptedStoredPassword == decryptedPassword) {
                     loginSuccess = true;
@@ -106,6 +111,7 @@ void handleClient(SOCKET clientSocket) {
             }
             infile.close();
 
+            // Respond to client based on login success
             if (loginSuccess) {
                 send(clientSocket, "Login Successful", 17, 0);
                 cout << "User " << username << " logged in successfully." << endl;
@@ -119,20 +125,31 @@ void handleClient(SOCKET clientSocket) {
         } else if (command == "CREATE") {
             string username, encryptedPassword;
             ss >> username >> encryptedPassword;
+
+            // Check if the username already exists
             ifstream infile("users.txt");
             string line;
+            bool usernameExists = false;
             while (getline(infile, line)) {
                 stringstream linestream(line);
                 string storedUsername;
                 linestream >> storedUsername;
 
                 if (storedUsername == username) {
-                    string message = "The user name already exist.";
-                    cout<<message;
-                    send(clientSocket, "The user name already exist.", 29, 0);
+                    usernameExists = true;
                     break;
-                }else if (storedUsername != username){
-                // Store the username and encrypted password in users.txt
+                }
+            }
+            infile.close();
+
+            // Respond to client based on username existence
+            if (usernameExists) {
+                send(clientSocket, "The username already exists.", 29, 0);
+                closesocket(clientSocket);
+                removeClient(clientSocket);
+                return;
+            } else {
+                // Store the new username and encrypted password
                 ofstream outfile("users.txt", ios::app);
                 if (outfile.is_open()) {
                     outfile << username << " " << encryptedPassword << endl;
@@ -143,13 +160,13 @@ void handleClient(SOCKET clientSocket) {
                     send(clientSocket, "Account creation failed", 24, 0);
                     cerr << "Error: Unable to open users.txt for writing." << endl;
                 }
+            }
         } else {
             cerr << "Unknown command received." << endl;
             closesocket(clientSocket);
             removeClient(clientSocket);
             return;
         }
-            }
     } else {
         cerr << "Failed to receive data." << endl;
         closesocket(clientSocket);
@@ -162,25 +179,22 @@ void handleClient(SOCKET clientSocket) {
         memset(buffer, 0, sizeof(buffer));
         bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
         if (bytesReceived <= 0) {
-            cerr << "Client disconnected or error occurred.\n";
+            cerr << "Client disconnected or error occurred." << endl;
             break;
         }
 
         // Broadcast received message to other connected clients
-        clientMutex.lock();
+        lock_guard<mutex> lock(clientMutex);
         for (ClientNode* current = connectedClientsHead; current != nullptr; current = current->next) {
             if (current->clientSocket != clientSocket) {
-                cout<<"Received: "<< buffer << "\n";
                 send(current->clientSocket, buffer, bytesReceived, 0);
             }
         }
-        clientMutex.unlock();
     }
 
-    // Remove client from the list of connected clients
+    // Clean up: Close socket and remove client from list
     closesocket(clientSocket);
     removeClient(clientSocket);
-}
 }
 
 int main() {
@@ -191,14 +205,14 @@ int main() {
 
     // Initialize Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        cerr << "WSAStartup failed.\n";
+        cerr << "WSAStartup failed." << endl;
         return 1;
     }
 
     // Create socket
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket == INVALID_SOCKET) {
-        cerr << "Failed to create socket.\n";
+        cerr << "Failed to create socket." << endl;
         WSACleanup();
         return 1;
     }
@@ -209,7 +223,7 @@ int main() {
     serverAddr.sin_port = htons(8888);
 
     if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        cerr << "Bind failed.\n";
+        cerr << "Bind failed." << endl;
         closesocket(serverSocket);
         WSACleanup();
         return 1;
@@ -217,29 +231,32 @@ int main() {
 
     // Listen for incoming connections
     if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
-        cerr << "Listen failed.\n";
+        cerr << "Listen failed." << endl;
         closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
-    cout << "Chat server is running on port 8888...\n";
+    cout << "Chat server is running on port 8888..." << endl;
 
+    // Accept and handle incoming client connections
     while (true) {
         SOCKET clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (clientSocket == INVALID_SOCKET) {
-            cerr << "Accept failed.\n";
+            cerr << "Accept failed." << endl;
             continue;
         }
 
-        cout << "New client connected from " << inet_ntoa(clientAddr.sin_addr) << ".\n";
+        cout << "New client connected from " << inet_ntoa(clientAddr.sin_addr) << "." << endl;
 
+        // Add client to the list and handle communication in a new thread
         addClient(clientSocket);
-
-        thread(handleClient, clientSocket).detach();  // Handle client in a new thread
+        thread(handleClient, clientSocket).detach();
     }
 
+    // Clean up: Close server socket and cleanup Winsock
     closesocket(serverSocket);
     WSACleanup();
+
     return 0;
 }
